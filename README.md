@@ -34,7 +34,7 @@
 
 ## ThingSpeak MQTT 設定
 
-主要設定在 [src/main.cpp](src/main.cpp) 頂端：
+主要設定在 [src/esp32_nbiot_thingspeak_mqtt.ino](src/esp32_nbiot_thingspeak_mqtt.ino) 頂端：
 
 ```cpp
 static const char *kThingSpeakHost = "mqtt3.thingspeak.com";
@@ -44,6 +44,21 @@ static const char *kThingSpeakMqttClientId = "...";
 static const char *kThingSpeakMqttUsername = "...";
 static const char *kThingSpeakMqttPassword = "...";
 ```
+
+### ThingSpeak 資料如何取得
+
+1. 登入 ThingSpeak。
+2. 建立或打開要接收資料的 Channel。
+3. 在 Channel 頁面找到 `Channel ID`，填入 `kThingSpeakChannelId`。
+4. 到 ThingSpeak 的 `Devices` / `MQTT` 裝置設定頁面。
+5. 新增一個 MQTT Device，並授權它可以寫入這個 Channel。
+6. ThingSpeak 會產生 MQTT credentials：
+   - `Client ID` 填入 `kThingSpeakMqttClientId`
+   - `Username` 填入 `kThingSpeakMqttUsername`
+   - `Password` 填入 `kThingSpeakMqttPassword`
+7. Channel 的 Field 設定建議：
+   - Field 1：Temperature
+   - Field 2：Humidity
 
 MQTT 發送目標：
 
