@@ -1,6 +1,6 @@
 # ESP32 NB303 ThingSpeak 溫溼度 MQTT
 
-這是 ESP32 Arduino / PlatformIO 專案。ESP32 透過 NB303 NB-IoT 模組連線，讀取 DHT11 溫溼度，並用 MQTT 發送到 ThingSpeak。
+本專案使用 ESP32 Arduino / PlatformIO 開發。ESP32 透過 NB303 NB-IoT 模組連線，讀取 DHT11 溫溼度，並透過 MQTT 發送至 ThingSpeak。
 
 ## 硬體
 
@@ -22,7 +22,7 @@
 | GPIO33 | 重啟/控制腳 |
 | GND | GND |
 
-`GPIO15` 和 `GPIO33` 會先拉低 5 秒再拉高，用來觸發 NB303 重開機。
+`GPIO15` 和 `GPIO33` 會拉低 5 秒後再拉高，用於觸發 NB303 重開機。
 
 ### ESP32 與 DHT11
 
@@ -45,13 +45,13 @@ static const char *kThingSpeakMqttUsername = "...";
 static const char *kThingSpeakMqttPassword = "...";
 ```
 
-### ThingSpeak 資料如何取得
+### ThingSpeak 資料取得方式
 
 1. 登入 ThingSpeak。
-2. 建立或打開要接收資料的 Channel。
+2. 建立或開啟要接收資料的 Channel。
 3. 在 Channel 頁面找到 `Channel ID`，填入 `kThingSpeakChannelId`。
-4. 到 ThingSpeak 的 `Devices` / `MQTT` 裝置設定頁面。
-5. 新增一個 MQTT Device，並授權它可以寫入這個 Channel。
+4. 從 ThingSpeak 上方選單進入 `Devices`，再選擇 `MQTT` 裝置設定頁面。
+5. 新增 MQTT Device，並授權該裝置寫入指定 Channel。
 6. ThingSpeak 會產生 MQTT credentials：
    - `Client ID` 填入 `kThingSpeakMqttClientId`
    - `Username` 填入 `kThingSpeakMqttUsername`
@@ -62,13 +62,13 @@ static const char *kThingSpeakMqttPassword = "...";
 
 ### ThingSpeak 設定截圖說明
 
-請將截圖放在 `docs/images/`，建議使用以下檔名。圖片放入後，GitHub README 會直接顯示。
+截圖存放於 `docs/images/`，檔名與用途如下。
 
 #### 1. Channel ID
 
 ![ThingSpeak Channel ID](docs/images/thingspeak-channel-id.jpg)
 
-Channel 頁面會顯示 `Channel ID`。本專案目前使用：
+Channel 頁面顯示 `Channel ID`。本專案目前使用：
 
 ```cpp
 static const char *kThingSpeakChannelId = "2925903";
@@ -76,26 +76,32 @@ static const char *kThingSpeakChannelId = "2925903";
 
 #### 2. 新增 MQTT Device 並授權 Channel
 
+從上方選單進入 `Devices`，並選擇 `MQTT`：
+
+![ThingSpeak MQTT Device 功能位置](docs/images/thingspeak-mqtt-device-menu.jpg)
+
+進入 MQTT 裝置頁面後，新增 MQTT Device 並授權 Channel：
+
 ![新增 ThingSpeak MQTT Device](docs/images/thingspeak-add-device.png)
 
-新增 MQTT Device 時，需選擇要授權的 Channel，並勾選：
+新增 MQTT Device 時，需選擇授權 Channel，並勾選：
 
 - Allow Publish
 - Allow Subscribe
 
-此專案至少需要 `Allow Publish`，才能把資料寫入 ThingSpeak Channel。
+本專案至少需要 `Allow Publish` 權限，才能將資料寫入 ThingSpeak Channel。
 
 #### 3. 複製 MQTT Credentials
 
 ![ThingSpeak MQTT Credentials](docs/images/thingspeak-mqtt-credentials.png)
 
-建立 MQTT Device 後，ThingSpeak 會顯示三個重要資料：
+建立 MQTT Device 後，ThingSpeak 會顯示下列 MQTT credentials：
 
 - Client ID
 - Username
 - Password
 
-這三個值要填到程式：
+上述三個值需填入程式：
 
 ```cpp
 static const char *kThingSpeakMqttClientId = "...";
@@ -103,7 +109,7 @@ static const char *kThingSpeakMqttUsername = "...";
 static const char *kThingSpeakMqttPassword = "...";
 ```
 
-ThingSpeak 不會保存可再次查看的 MQTT password，建立後請立即複製或下載保存。
+ThingSpeak 不會保存可再次查看的 MQTT password。建立 MQTT Device 後，需立即複製或下載保存。
 
 MQTT 發送目標：
 
@@ -121,9 +127,9 @@ MQTT 發送目標：
 3. `ATI` 正常後送 `AT+SM=LOCK_FOREVER`，避免 NB303 進入睡眠。
 4. 執行任務前先送 `AT+CEREG?` 檢查註冊狀態。
 5. `+CEREG` 回覆包含 `,1` 或 `,5` 才視為網路註冊完成。
-6. 註冊完成後立即送第 1 筆 ThingSpeak 資料。
-7. 後續每 1 分鐘送 1 筆資料。
-8. 如果重開機後 5 分鐘內仍未完成註冊，會再次觸發 NB303 重開機。
+6. 註冊完成後立即發送第 1 筆 ThingSpeak 資料。
+7. 後續每 1 分鐘發送 1 筆資料。
+8. 若重開機後 5 分鐘內仍未完成註冊，系統會再次觸發 NB303 重開機。
 
 ## 編譯
 
@@ -143,7 +149,7 @@ python -m platformio run -t upload
 python -m platformio device monitor --port COM11 --baud 115200
 ```
 
-## 目前注意事項
+## 注意事項
 
 如果序列輸出出現：
 
@@ -151,4 +157,4 @@ python -m platformio device monitor --port COM11 --baud 115200
 [DHT11] read failed
 ```
 
-表示還沒成功讀到 DHT11，請先檢查 `GPIO25`、VCC、GND、DATA 接線，以及 DHT11 是否需要上拉電阻。
+表示尚未成功讀取 DHT11。需檢查 `GPIO25`、VCC、GND、DATA 接線，以及 DHT11 DATA 腳是否需要上拉電阻。
