@@ -60,6 +60,51 @@ static const char *kThingSpeakMqttPassword = "...";
    - Field 1：Temperature
    - Field 2：Humidity
 
+### ThingSpeak 設定截圖說明
+
+請將截圖放在 `docs/images/`，建議使用以下檔名。圖片放入後，GitHub README 會直接顯示。
+
+#### 1. Channel ID
+
+![ThingSpeak Channel ID](docs/images/thingspeak-channel-id.png)
+
+Channel 頁面會顯示 `Channel ID`。本專案目前使用：
+
+```cpp
+static const char *kThingSpeakChannelId = "2925903";
+```
+
+#### 2. 新增 MQTT Device 並授權 Channel
+
+![新增 ThingSpeak MQTT Device](docs/images/thingspeak-add-device.png)
+
+新增 MQTT Device 時，需選擇要授權的 Channel，並勾選：
+
+- Allow Publish
+- Allow Subscribe
+
+此專案至少需要 `Allow Publish`，才能把資料寫入 ThingSpeak Channel。
+
+#### 3. 複製 MQTT Credentials
+
+![ThingSpeak MQTT Credentials](docs/images/thingspeak-mqtt-credentials.png)
+
+建立 MQTT Device 後，ThingSpeak 會顯示三個重要資料：
+
+- Client ID
+- Username
+- Password
+
+這三個值要填到程式：
+
+```cpp
+static const char *kThingSpeakMqttClientId = "...";
+static const char *kThingSpeakMqttUsername = "...";
+static const char *kThingSpeakMqttPassword = "...";
+```
+
+ThingSpeak 不會保存可再次查看的 MQTT password，建立後請立即複製或下載保存。
+
 MQTT 發送目標：
 
 - Host：`mqtt3.thingspeak.com`
