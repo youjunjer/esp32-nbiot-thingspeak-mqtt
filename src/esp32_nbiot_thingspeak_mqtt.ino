@@ -7,58 +7,58 @@
 #define NB303_PORT Serial2
 
 // NB303 使用 ESP32 的 Serial2，GPIO16/17 分別接 NB303 TX/RX。
-static constexpr int kNb303RxPin = 16; // ESP32 RX2, connect to NB303 TX
-static constexpr int kNb303TxPin = 17; // ESP32 TX2, connect to NB303 RX
+int nb303RxPin = 16; // ESP32 RX2, connect to NB303 TX
+int nb303TxPin = 17; // ESP32 TX2, connect to NB303 RX
 
 // GPIO15 與 GPIO33 同時拉低 5 秒再拉高，用來觸發 NB303 重開機。
-static constexpr int kNb303BootPin1 = 15;
-static constexpr int kNb303BootPin2 = 33;
+int nb303BootPin1 = 15;
+int nb303BootPin2 = 33;
 
 // DHT11 DATA 腳接 GPIO25，使用 SimpleDHT 程式庫讀取溫溼度。
-static constexpr int kDhtPin = 25;
+int dhtPin = 25;
 
-static constexpr uint32_t kDebugBaud = 115200;
-static constexpr uint32_t kNb303Baud = 115200;
-static constexpr uint32_t kAtiIntervalMs = 10000;
-static constexpr uint32_t kCeregIntervalMs = 5000;
+int debugBaud = 115200;
+int nb303Baud = 115200;
+int atiIntervalMs = 10000;
+int ceregIntervalMs = 5000;
 
 // NB303 重開機後最多等待 5 分鐘完成註冊，逾時才再次重開機。
-static constexpr uint32_t kRegistrationTimeoutMs = 300000;
-static constexpr uint32_t kNb303BootLowMs = 5000;
-static constexpr uint32_t kPublishIntervalMs = 60UL * 1000UL; // 1 data point per minute
+int registrationTimeoutMs = 300000;
+int nb303BootLowMs = 5000;
+int publishIntervalMs = 60000; // 1 data point per minute
 
 // ThingSpeak MQTT broker 與發送參數。
-static const char *kThingSpeakHost = "mqtt3.thingspeak.com";
-static const char *kThingSpeakPort = "1883";
-static const char *kMqttTimeout = "60000";
-static const char *kMqttBuffer = "1024";
+String thingSpeakHost = "mqtt3.thingspeak.com";
+String thingSpeakPort = "1883";
+String mqttTimeout = "60000";
+String mqttBuffer = "1024";
 
 // ThingSpeak MQTT Device credentials 與 Channel ID。
-static const char *kThingSpeakChannelId = "2925903";
-static const char *kThingSpeakMqttClientId = "YOUR_MQTT_CLIENT_ID";
-static const char *kThingSpeakMqttUsername = "YOUR_MQTT_USERNAME";
-static const char *kThingSpeakMqttPassword = "YOUR_MQTT_PASSWORD";
+String thingSpeakChannelId = "2925903";
+String thingSpeakMqttClientId = "YOUR_MQTT_CLIENT_ID";
+String thingSpeakMqttUsername = "YOUR_MQTT_USERNAME";
+String thingSpeakMqttPassword = "YOUR_MQTT_PASSWORD";
 
-static bool g_sleepLocked = false;
-static bool g_networkRegistered = false;
-static bool g_mqttConnected = false;
-static bool g_publishImmediatelyAfterRegister = true;
-static uint32_t g_lastAtiMs = 0;
-static uint32_t g_lastCeregMs = 0;
-static uint32_t g_lastPublishMs = 0;
-static uint32_t g_registrationWindowStartMs = 0;
-static char g_cmdBuf[160];
-static size_t g_cmdLen = 0;
-static char g_lastRxBuf[1400];
-static SimpleDHT11 dht(kDhtPin);
+bool g_sleepLocked = false;
+bool g_networkRegistered = false;
+bool g_mqttConnected = false;
+bool g_publishImmediatelyAfterRegister = true;
+unsigned long g_lastAtiMs = 0;
+unsigned long g_lastCeregMs = 0;
+unsigned long g_lastPublishMs = 0;
+unsigned long g_registrationWindowStartMs = 0;
+char g_cmdBuf[160];
+size_t g_cmdLen = 0;
+char g_lastRxBuf[1400];
+SimpleDHT11 dht(dhtPin);
 
 // 若仍保留預設占位字串，就不要嘗試發布，避免送到錯誤的 MQTT topic。
 static bool hasPlaceholderConfig()
 {
-  return strcmp(kThingSpeakChannelId, "YOUR_CHANNEL_ID") == 0 ||
-         strcmp(kThingSpeakMqttClientId, "YOUR_MQTT_CLIENT_ID") == 0 ||
-         strcmp(kThingSpeakMqttUsername, "YOUR_MQTT_USERNAME") == 0 ||
-         strcmp(kThingSpeakMqttPassword, "YOUR_MQTT_PASSWORD") == 0;
+  return thingSpeakChannelId == "YOUR_CHANNEL_ID" ||
+         thingSpeakMqttClientId == "YOUR_MQTT_CLIENT_ID" ||
+         thingSpeakMqttUsername == "YOUR_MQTT_USERNAME" ||
+         thingSpeakMqttPassword == "YOUR_MQTT_PASSWORD";
 }
 
 static void clearNb303Rx()
@@ -68,12 +68,12 @@ static void clearNb303Rx()
   }
 }
 
-static bool waitNb303Response(uint32_t timeoutMs)
+static bool waitNb303Response(unsigned long timeoutMs)
 {
   memset(g_lastRxBuf, 0, sizeof(g_lastRxBuf));
   size_t idx = 0;
   bool gotAny = false;
-  uint32_t start = millis();
+  unsigned long start = millis();
 
   DBG_PORT.println("[NB303 RX]");
   while ((millis() - start) < timeoutMs) {
@@ -107,7 +107,7 @@ static bool waitNb303Response(uint32_t timeoutMs)
 }
 
 // 送出一行 NB303 AT 指令，並等待 OK/ERROR 或逾時。
-static bool sendNb303Command(const char *cmd, uint32_t timeoutMs)
+static bool sendNb303Command(const char *cmd, unsigned long timeoutMs)
 {
   clearNb303Rx();
   DBG_PORT.print("[TX] ");
@@ -148,15 +148,15 @@ static bool checkNetworkRegistration()
 static void rebootNb303()
 {
   DBG_PORT.println("[PWR] NB303 reboot trigger: GPIO15/GPIO33 LOW for 5s");
-  pinMode(kNb303BootPin1, OUTPUT);
-  pinMode(kNb303BootPin2, OUTPUT);
-  digitalWrite(kNb303BootPin1, LOW);
-  digitalWrite(kNb303BootPin2, LOW);
-  delay(kNb303BootLowMs);
+  pinMode(nb303BootPin1, OUTPUT);
+  pinMode(nb303BootPin2, OUTPUT);
+  digitalWrite(nb303BootPin1, LOW);
+  digitalWrite(nb303BootPin2, LOW);
+  delay(nb303BootLowMs);
 
   DBG_PORT.println("[PWR] GPIO15/GPIO33 HIGH");
-  digitalWrite(kNb303BootPin1, HIGH);
-  digitalWrite(kNb303BootPin2, HIGH);
+  digitalWrite(nb303BootPin1, HIGH);
+  digitalWrite(nb303BootPin2, HIGH);
   delay(1000);
 }
 
@@ -183,7 +183,7 @@ static void restartNb303Flow()
   g_lastPublishMs = 0;
   NB303_PORT.end();
   rebootNb303();
-  NB303_PORT.begin(kNb303Baud, SERIAL_8N1, kNb303RxPin, kNb303TxPin);
+  NB303_PORT.begin(nb303Baud, SERIAL_8N1, nb303RxPin, nb303TxPin);
   delay(300);
   runAtiAndSleepLock();
   g_lastAtiMs = millis();
@@ -202,13 +202,13 @@ static bool ensureNetworkRegisteredBeforeTask()
   if (!g_sleepLocked) return false;
   if (checkNetworkRegistration()) return true;
 
-  uint32_t now = millis();
-  uint32_t elapsed = now - g_registrationWindowStartMs;
-  if (elapsed >= kRegistrationTimeoutMs) {
+  unsigned long now = millis();
+  unsigned long elapsed = now - g_registrationWindowStartMs;
+  if (elapsed >= registrationTimeoutMs) {
     DBG_PORT.println("[RECOVER] Not registered for 300s, reboot NB303 before task");
     restartNb303Flow();
   } else {
-    uint32_t remainSec = (kRegistrationTimeoutMs - elapsed + 999) / 1000;
+    unsigned long remainSec = (registrationTimeoutMs - elapsed + 999) / 1000;
     DBG_PORT.print("[WAIT] Registration pending, retry before reboot in ");
     DBG_PORT.print(remainSec);
     DBG_PORT.println("s");
@@ -241,14 +241,15 @@ static bool mqttConnect()
 
   char cmd[360];
 
-  snprintf(cmd, sizeof(cmd), "AT+EDNS=\"%s\"", kThingSpeakHost);
+  snprintf(cmd, sizeof(cmd), "AT+EDNS=\"%s\"", thingSpeakHost.c_str());
   if (!sendNb303Command(cmd, 8000)) {
     DBG_PORT.println("[STEP EDNS] FAIL");
     return false;
   }
   DBG_PORT.println("[STEP EDNS] OK");
 
-  snprintf(cmd, sizeof(cmd), "AT+EMQNEW=%s,%s,%s,%s", kThingSpeakHost, kThingSpeakPort, kMqttTimeout, kMqttBuffer);
+  snprintf(cmd, sizeof(cmd), "AT+EMQNEW=%s,%s,%s,%s",
+           thingSpeakHost.c_str(), thingSpeakPort.c_str(), mqttTimeout.c_str(), mqttBuffer.c_str());
   if (!sendNb303Command(cmd, 8000)) {
     DBG_PORT.println("[STEP EMQNEW] FAIL");
     return false;
@@ -256,7 +257,7 @@ static bool mqttConnect()
   DBG_PORT.println("[STEP EMQNEW] OK");
 
   snprintf(cmd, sizeof(cmd), "AT+EMQCON=0,3.1,\"%s\",60000,1,0,\"%s\",\"%s\"",
-           kThingSpeakMqttClientId, kThingSpeakMqttUsername, kThingSpeakMqttPassword);
+           thingSpeakMqttClientId.c_str(), thingSpeakMqttUsername.c_str(), thingSpeakMqttPassword.c_str());
   if (!sendNb303Command(cmd, 10000)) {
     DBG_PORT.println("[STEP EMQCON] FAIL");
     return false;
@@ -293,7 +294,7 @@ static bool publishThingSpeak(float temperature, float humidity)
   }
 
   char topic[80];
-  snprintf(topic, sizeof(topic), "channels/%s/publish", kThingSpeakChannelId);
+  snprintf(topic, sizeof(topic), "channels/%s/publish", thingSpeakChannelId.c_str());
 
   char payload[120];
   snprintf(payload, sizeof(payload), "field1=%.1f&field2=%.1f&status=NB303", temperature, humidity);
@@ -371,14 +372,14 @@ void setup()
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, LOW);
 
-  DBG_PORT.begin(kDebugBaud);
+  DBG_PORT.begin(debugBaud);
   delay(300);
   DBG_PORT.println();
   DBG_PORT.println("=== 13_esp32_nb303_thingspeak_dht_mqtt ===");
   DBG_PORT.println("NB303 reboot trigger: GPIO15/GPIO33 LOW 5s, then HIGH");
   rebootNb303();
 
-  NB303_PORT.begin(kNb303Baud, SERIAL_8N1, kNb303RxPin, kNb303TxPin);
+  NB303_PORT.begin(nb303Baud, SERIAL_8N1, nb303RxPin, nb303TxPin);
 
   DBG_PORT.println("NB303 UART: RX2=GPIO16 <- NB303 TX, TX2=GPIO17 -> NB303 RX, 115200 8N1");
   DBG_PORT.println("DHT: GPIO25, DHT11, SimpleDHT");
@@ -395,18 +396,18 @@ void loop()
   handleUsbConsole();
   mirrorNb303Urc();
 
-  uint32_t now = millis();
-  if (!g_sleepLocked && (now - g_lastAtiMs) >= kAtiIntervalMs) {
+  unsigned long now = millis();
+  if (!g_sleepLocked && (now - g_lastAtiMs) >= atiIntervalMs) {
     g_lastAtiMs = now;
     runAtiAndSleepLock();
   }
 
   // 註冊成功後立即送第一筆，之後每 1 分鐘送 1 筆。
-  bool duePublish = g_lastPublishMs == 0 || (now - g_lastPublishMs) >= kPublishIntervalMs;
+  bool duePublish = g_lastPublishMs == 0 || (now - g_lastPublishMs) >= publishIntervalMs;
   if (g_publishImmediatelyAfterRegister) {
     duePublish = true;
   }
-  bool dueCereg = g_sleepLocked && (now - g_lastCeregMs) >= kCeregIntervalMs;
+  bool dueCereg = g_sleepLocked && (now - g_lastCeregMs) >= ceregIntervalMs;
 
   if (duePublish || dueCereg) {
     g_lastCeregMs = now;
@@ -419,7 +420,7 @@ void loop()
     }
   }
 
-  static uint32_t lastBlinkMs = 0;
+  static unsigned long lastBlinkMs = 0;
   if ((now - lastBlinkMs) >= 500) {
     lastBlinkMs = now;
     digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));

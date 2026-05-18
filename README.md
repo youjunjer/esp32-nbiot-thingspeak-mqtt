@@ -37,25 +37,25 @@
 主要設定在 [src/esp32_nbiot_thingspeak_mqtt.ino](src/esp32_nbiot_thingspeak_mqtt.ino) 頂端：
 
 ```cpp
-static const char *kThingSpeakHost = "mqtt3.thingspeak.com";
-static const char *kThingSpeakPort = "1883";
-static const char *kThingSpeakChannelId = "2925903";
-static const char *kThingSpeakMqttClientId = "...";
-static const char *kThingSpeakMqttUsername = "...";
-static const char *kThingSpeakMqttPassword = "...";
+String thingSpeakHost = "mqtt3.thingspeak.com";
+String thingSpeakPort = "1883";
+String thingSpeakChannelId = "2925903";
+String thingSpeakMqttClientId = "...";
+String thingSpeakMqttUsername = "...";
+String thingSpeakMqttPassword = "...";
 ```
 
 ### ThingSpeak 資料取得方式
 
 1. 登入 ThingSpeak。
 2. 建立或開啟要接收資料的 Channel。
-3. 在 Channel 頁面找到 `Channel ID`，填入 `kThingSpeakChannelId`。
+3. 在 Channel 頁面找到 `Channel ID`，填入 `thingSpeakChannelId`。
 4. 從 ThingSpeak 上方選單進入 `Devices`，再選擇 `MQTT` 裝置設定頁面。
 5. 新增 MQTT Device，並授權該裝置寫入指定 Channel。
 6. ThingSpeak 會產生 MQTT credentials：
-   - `Client ID` 填入 `kThingSpeakMqttClientId`
-   - `Username` 填入 `kThingSpeakMqttUsername`
-   - `Password` 填入 `kThingSpeakMqttPassword`
+   - `Client ID` 填入 `thingSpeakMqttClientId`
+   - `Username` 填入 `thingSpeakMqttUsername`
+   - `Password` 填入 `thingSpeakMqttPassword`
 7. Channel 的 Field 設定建議：
    - Field 1：Temperature
    - Field 2：Humidity
@@ -71,7 +71,7 @@ static const char *kThingSpeakMqttPassword = "...";
 Channel 頁面顯示 `Channel ID`。本專案目前使用：
 
 ```cpp
-static const char *kThingSpeakChannelId = "2925903";
+String thingSpeakChannelId = "2925903";
 ```
 
 #### 2. 新增 MQTT Device 並授權 Channel
@@ -104,9 +104,9 @@ static const char *kThingSpeakChannelId = "2925903";
 上述三個值需填入程式：
 
 ```cpp
-static const char *kThingSpeakMqttClientId = "...";
-static const char *kThingSpeakMqttUsername = "...";
-static const char *kThingSpeakMqttPassword = "...";
+String thingSpeakMqttClientId = "...";
+String thingSpeakMqttUsername = "...";
+String thingSpeakMqttPassword = "...";
 ```
 
 ThingSpeak 不會保存可再次查看的 MQTT password。建立 MQTT Device 後，需立即複製或下載保存。
