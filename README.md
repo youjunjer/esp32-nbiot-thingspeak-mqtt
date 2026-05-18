@@ -1,14 +1,15 @@
-# ESP32 NB303 ThingSpeak 溫溼度 MQTT
+# ESP32 NB303 ThingSpeak MQTT 溫溼度上傳
 
-本專案使用 ESP32 Arduino / PlatformIO 開發。ESP32 透過 NB303 NB-IoT 模組連線，讀取 DHT11 溫溼度，並透過 MQTT 發送至 ThingSpeak。
+本專案使用 ESP32 Arduino 程式，透過 NB303 NB-IoT 模組連線，讀取 DHT11 溫溼度資料，並以 MQTT 發送到 ThingSpeak。
 
-## 硬體
+## 硬體設定
 
-- 開發板：ESP32 NodeMCU-32S
-- USB 序列監控：`COM11 @ 115200`
-- NB303 UART：ESP32 `Serial2 @ 115200 8N1`
-- 溫溼度感測器：`DHT11`
-- DHT 程式庫：`SimpleDHT`
+- 開發板：ESP32
+- NB-IoT 模組：NB303
+- 感測器：DHT11
+- DHT 程式庫：SimpleDHT
+- DHT11 DATA 腳位：GPIO25
+- NB303 UART：ESP32 Serial2，115200 8N1
 
 ## 接線
 
@@ -18,11 +19,11 @@
 | --- | --- |
 | GPIO17 TX2 | RX |
 | GPIO16 RX2 | TX |
-| GPIO15 | 重啟/控制腳 |
-| GPIO33 | 重啟/控制腳 |
+| GPIO15 | 重開機控制腳 |
+| GPIO33 | 重開機控制腳 |
 | GND | GND |
 
-`GPIO15` 和 `GPIO33` 會拉低 5 秒後再拉高，用於觸發 NB303 重開機。
+GPIO15 與 GPIO33 會在 NB303 開機或重新註冊逾時時拉低 5 秒，再拉高，用來觸發 NB303 重開機。
 
 ### ESP32 與 DHT11
 
@@ -34,113 +35,92 @@
 
 ## ThingSpeak MQTT 設定
 
-主要設定在 [src/esp32_nbiot_thingspeak_mqtt.ino](src/esp32_nbiot_thingspeak_mqtt.ino) 頂端：
+請在 [src/esp32_nbiot_thingspeak_mqtt.ino](src/esp32_nbiot_thingspeak_mqtt.ino) 中填入自己的 ThingSpeak MQTT 資訊：
 
 ```cpp
-String thingSpeakHost = "mqtt3.thingspeak.com";
-String thingSpeakPort = "1883";
-String thingSpeakChannelId = "2925903";
-String thingSpeakMqttClientId = "...";
-String thingSpeakMqttUsername = "...";
-String thingSpeakMqttPassword = "...";
+String thingSpeakChannelId = "YOUR_CHANNEL_ID";
+String thingSpeakMqttClientId = "YOUR_MQTT_CLIENT_ID";
+String thingSpeakMqttUsername = "YOUR_MQTT_USERNAME";
+String thingSpeakMqttPassword = "YOUR_MQTT_PASSWORD";
 ```
 
-### ThingSpeak 資料取得方式
+MQTT 連線設定：
 
-1. 登入 ThingSpeak。
-2. 建立或開啟要接收資料的 Channel。
-3. 在 Channel 頁面找到 `Channel ID`，填入 `thingSpeakChannelId`。
-4. 從 ThingSpeak 上方選單進入 `Devices`，再選擇 `MQTT` 裝置設定頁面。
-5. 新增 MQTT Device，並授權該裝置寫入指定 Channel。
-6. ThingSpeak 會產生 MQTT credentials：
-   - `Client ID` 填入 `thingSpeakMqttClientId`
-   - `Username` 填入 `thingSpeakMqttUsername`
-   - `Password` 填入 `thingSpeakMqttPassword`
-7. Channel 的 Field 設定建議：
-   - Field 1：Temperature
-   - Field 2：Humidity
+- Host：`mqtt3.thingspeak.com`
+- Port：`1883`
+- Topic：`channels/<channelID>/publish`
+- Payload：`field1=<temperature>&field2=<humidity>&status=NB303`
+- Field 1：溫度
+- Field 2：濕度
 
-### ThingSpeak 設定截圖說明
+## ThingSpeak 資料取得方式
 
-截圖存放於 `docs/images/`，檔名與用途如下。
+### 1. 取得 Channel ID
 
-#### 1. Channel ID
+進入 ThingSpeak Channel 頁面後，頁面標題下方會顯示 `Channel ID`。請將該數值填入程式中的 `thingSpeakChannelId`。
 
 ![ThingSpeak Channel ID](docs/images/thingspeak-channel-id.jpg)
 
-Channel 頁面顯示 `Channel ID`。本專案目前使用：
-
 ```cpp
-String thingSpeakChannelId = "2925903";
+String thingSpeakChannelId = "YOUR_CHANNEL_ID";
 ```
 
-#### 2. 新增 MQTT Device 並授權 Channel
+### 2. 進入 MQTT Device 功能
 
-從上方選單進入 `Devices`，並選擇 `MQTT`：
+ThingSpeak 上方選單選擇 `Devices`，再進入 `MQTT`。
 
 ![ThingSpeak MQTT Device 功能位置](docs/images/thingspeak-mqtt-device-menu.jpg)
 
-進入 MQTT 裝置頁面後，新增 MQTT Device 並授權 Channel：
+### 3. 新增 MQTT Device 並授權 Channel
+
+新增 MQTT Device 時，選擇要發送資料的 Channel，並勾選授權項目。
 
 ![新增 ThingSpeak MQTT Device](docs/images/thingspeak-add-device.png)
 
-新增 MQTT Device 時，需選擇授權 Channel，並勾選：
+建議確認下列授權：
 
 - Allow Publish
 - Allow Subscribe
 
-本專案至少需要 `Allow Publish` 權限，才能將資料寫入 ThingSpeak Channel。
+本專案主要使用 `Allow Publish` 將資料寫入 ThingSpeak Channel。
 
-#### 3. 複製 MQTT Credentials
+### 4. 取得 MQTT Credentials
+
+完成 MQTT Device 建立後，ThingSpeak 會顯示 MQTT credentials。
 
 ![ThingSpeak MQTT Credentials](docs/images/thingspeak-mqtt-credentials.png)
 
-建立 MQTT Device 後，ThingSpeak 會顯示下列 MQTT credentials：
-
-- Client ID
-- Username
-- Password
-
-上述三個值需填入程式：
+請將欄位對應填入程式：
 
 ```cpp
-String thingSpeakMqttClientId = "...";
-String thingSpeakMqttUsername = "...";
-String thingSpeakMqttPassword = "...";
+String thingSpeakMqttClientId = "YOUR_MQTT_CLIENT_ID";
+String thingSpeakMqttUsername = "YOUR_MQTT_USERNAME";
+String thingSpeakMqttPassword = "YOUR_MQTT_PASSWORD";
 ```
 
-ThingSpeak 不會保存可再次查看的 MQTT password。建立 MQTT Device 後，需立即複製或下載保存。
+ThingSpeak 不會保存可再次查看的 MQTT password。建立 MQTT Device 後，請立即保存或下載 credentials。
 
-MQTT 發送目標：
+## 程式流程
 
-- Host：`mqtt3.thingspeak.com`
-- Port：`1883`
-- Topic：`channels/2925903/publish`
-- Payload：`field1=<temperature>&field2=<humidity>&status=NB303`
-- `field1`：溫度
-- `field2`：濕度
-
-## 執行流程
-
-1. ESP32 觸發 NB303 重開機：`GPIO15`、`GPIO33` 拉低 5 秒後拉高。
-2. ESP32 送 `ATI` 確認 NB303 正常回應。
-3. `ATI` 正常後送 `AT+SM=LOCK_FOREVER`，避免 NB303 進入睡眠。
-4. 執行任務前先送 `AT+CEREG?` 檢查註冊狀態。
-5. `+CEREG` 回覆包含 `,1` 或 `,5` 才視為網路註冊完成。
-6. 註冊完成後立即發送第 1 筆 ThingSpeak 資料。
-7. 後續每 1 分鐘發送 1 筆資料。
-8. 若重開機後 5 分鐘內仍未完成註冊，系統會再次觸發 NB303 重開機。
+1. ESP32 開機後，GPIO15 與 GPIO33 拉低 5 秒再拉高，觸發 NB303 重開機。
+2. ESP32 送出 `ATI` 確認 NB303 回應正常。
+3. `ATI` 成功後送出 `AT+SM=LOCK_FOREVER`，避免 NB303 進入睡眠。
+4. 進入 `loop()` 後持續使用 `AT+CEREG?` 檢查網路註冊。
+5. `+CEREG` 回應包含 `,1` 或 `,5` 時，視為已完成網路註冊。
+6. 每次執行上傳任務前都會先確認已註冊，未註冊時不執行上傳。
+7. 若 5 分鐘內仍未註冊，GPIO15 與 GPIO33 再次拉低 5 秒後拉高，重新啟動 NB303。
+8. 註冊成功後立即上傳第一筆資料，之後每 1 分鐘上傳一次。
 
 ## 成果圖
 
-![ThingSpeak 資料接收成果](docs/images/thingspeak-result.jpg)
+![ThingSpeak 溫溼度資料結果](docs/images/thingspeak-result.jpg)
 
-## 注意事項
+## 常見問題
 
-如果序列輸出出現：
+若序列監控出現下列訊息：
 
 ```text
 [DHT11] read failed
 ```
 
-表示尚未成功讀取 DHT11。需檢查 `GPIO25`、VCC、GND、DATA 接線，以及 DHT11 DATA 腳是否需要上拉電阻。
+請檢查 DHT11 的 VCC、GND、DATA 接線，並確認 DATA 已接到 GPIO25。

@@ -6,54 +6,96 @@
 #define DBG_PORT Serial
 #define NB303_PORT Serial2
 
-// NB303 使用 ESP32 的 Serial2，GPIO16/17 分別接 NB303 TX/RX。
-int nb303RxPin = 16; // ESP32 RX2, connect to NB303 TX
-int nb303TxPin = 17; // ESP32 TX2, connect to NB303 RX
+int nb303RxPin = 16; // NB303 UART 接收腳，ESP32 RX2，連接 NB303 TX。
+int nb303TxPin = 17; // NB303 UART 傳送腳，ESP32 TX2，連接 NB303 RX。
+int nb303BootPin1 = 15; // NB303 重開機控制腳 1。
+int nb303BootPin2 = 33; // NB303 重開機控制腳 2。
+int dhtPin = 25; // DHT11 DATA 腳位。
+int debugBaud = 115200; // USB 序列監控 baud rate。
+int nb303Baud = 115200; // NB303 UART baud rate。
+int atiIntervalMs = 10000; // ATI 失敗時的重試間隔，單位毫秒。
+int ceregIntervalMs = 5000; // AT+CEREG? 註冊狀態檢查間隔，單位毫秒。
+int registrationTimeoutMs = 300000; // NB303 註冊等待上限，單位毫秒。
+int nb303BootLowMs = 5000; // NB303 重開機控制腳拉低時間，單位毫秒。
+int publishIntervalMs = 60000; // ThingSpeak 發送間隔，單位毫秒。
+String thingSpeakHost = "mqtt3.thingspeak.com"; // ThingSpeak MQTT broker 主機。
+String thingSpeakPort = "1883"; // ThingSpeak MQTT broker port。
+String mqttTimeout = "60000"; // NB303 MQTT 連線 timeout 參數。
+String mqttBuffer = "1024"; // NB303 MQTT buffer 大小。
+String thingSpeakChannelId = "YOUR_CHANNEL_ID"; // ThingSpeak Channel ID。
+String thingSpeakMqttClientId = "YOUR_MQTT_CLIENT_ID"; // ThingSpeak MQTT Device Client ID。
+String thingSpeakMqttUsername = "YOUR_MQTT_USERNAME"; // ThingSpeak MQTT Device Username。
+String thingSpeakMqttPassword = "YOUR_MQTT_PASSWORD"; // ThingSpeak MQTT Device Password。
+bool g_sleepLocked = false; // 記錄是否已送出 AT+SM=LOCK_FOREVER。
+bool g_networkRegistered = false; // 記錄 NB303 是否已完成網路註冊。
+bool g_mqttConnected = false; // 記錄 NB303 MQTT session 是否已連線。
+bool g_publishImmediatelyAfterRegister = true; // 註冊成功後是否要立即送第一筆資料。
+unsigned long g_lastAtiMs = 0; // 上一次送 ATI 的時間。
+unsigned long g_lastCeregMs = 0; // 上一次檢查 AT+CEREG? 的時間。
+unsigned long g_lastPublishMs = 0; // 上一次發送 ThingSpeak 資料的時間。
+unsigned long g_registrationWindowStartMs = 0; // 本次 NB303 註冊等待起始時間。
+char g_cmdBuf[160]; // USB 序列監控手動輸入 AT 指令的暫存區。
+size_t g_cmdLen = 0; // 手動 AT 指令目前輸入長度。
+char g_lastRxBuf[1400]; // NB303 最新回應內容暫存區。
+SimpleDHT11 dht(dhtPin); // DHT11 感測器物件。
 
-// GPIO15 與 GPIO33 同時拉低 5 秒再拉高，用來觸發 NB303 重開機。
-int nb303BootPin1 = 15;
-int nb303BootPin2 = 33;
+void setup()
+{
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, LOW);
 
-// DHT11 DATA 腳接 GPIO25，使用 SimpleDHT 程式庫讀取溫溼度。
-int dhtPin = 25;
+  DBG_PORT.begin(debugBaud);
+  delay(300);
+  DBG_PORT.println();
+  DBG_PORT.println("=== esp32_nb303_thingspeak_dht_mqtt ===");
+  DBG_PORT.println("NB303 reboot trigger: GPIO15/GPIO33 LOW 5s, then HIGH");
 
-int debugBaud = 115200;
-int nb303Baud = 115200;
-int atiIntervalMs = 10000;
-int ceregIntervalMs = 5000;
+  rebootNb303();
+  NB303_PORT.begin(nb303Baud, SERIAL_8N1, nb303RxPin, nb303TxPin);
 
-// NB303 重開機後最多等待 5 分鐘完成註冊，逾時才再次重開機。
-int registrationTimeoutMs = 300000;
-int nb303BootLowMs = 5000;
-int publishIntervalMs = 60000; // 1 data point per minute
+  DBG_PORT.println("NB303 UART: RX2=GPIO16 <- NB303 TX, TX2=GPIO17 -> NB303 RX, 115200 8N1");
+  DBG_PORT.println("DHT: GPIO25, DHT11, SimpleDHT");
+  DBG_PORT.println("ThingSpeak MQTT: mqtt3.thingspeak.com:1883");
+  DBG_PORT.print("> ");
 
-// ThingSpeak MQTT broker 與發送參數。
-String thingSpeakHost = "mqtt3.thingspeak.com";
-String thingSpeakPort = "1883";
-String mqttTimeout = "60000";
-String mqttBuffer = "1024";
+  runAtiAndSleepLock();
+  g_lastAtiMs = millis();
+  g_registrationWindowStartMs = millis();
+}
 
-// ThingSpeak MQTT Device credentials 與 Channel ID。
-String thingSpeakChannelId = "2925903";
-String thingSpeakMqttClientId = "YOUR_MQTT_CLIENT_ID";
-String thingSpeakMqttUsername = "YOUR_MQTT_USERNAME";
-String thingSpeakMqttPassword = "YOUR_MQTT_PASSWORD";
+void loop()
+{
+  handleUsbConsole();
+  mirrorNb303Urc();
 
-bool g_sleepLocked = false;
-bool g_networkRegistered = false;
-bool g_mqttConnected = false;
-bool g_publishImmediatelyAfterRegister = true;
-unsigned long g_lastAtiMs = 0;
-unsigned long g_lastCeregMs = 0;
-unsigned long g_lastPublishMs = 0;
-unsigned long g_registrationWindowStartMs = 0;
-char g_cmdBuf[160];
-size_t g_cmdLen = 0;
-char g_lastRxBuf[1400];
-SimpleDHT11 dht(dhtPin);
+  unsigned long now = millis();
+  if (!g_sleepLocked && (now - g_lastAtiMs) >= atiIntervalMs) {
+    g_lastAtiMs = now;
+    runAtiAndSleepLock();
+  }
 
-// 若仍保留預設占位字串，就不要嘗試發布，避免送到錯誤的 MQTT topic。
-static bool hasPlaceholderConfig()
+  bool duePublish = g_lastPublishMs == 0 || (now - g_lastPublishMs) >= publishIntervalMs;
+  if (g_publishImmediatelyAfterRegister) {
+    duePublish = true;
+  }
+  bool dueCereg = g_sleepLocked && (now - g_lastCeregMs) >= ceregIntervalMs;
+
+  if (duePublish || dueCereg) {
+    g_lastCeregMs = now;
+    if (ensureNetworkRegisteredBeforeTask()) {
+      if (duePublish) {
+        runPublishTask();
+        g_lastPublishMs = millis();
+        g_publishImmediatelyAfterRegister = false;
+      }
+    }
+  }
+
+  blinkStatusLed();
+}
+
+// 檢查 ThingSpeak 設定是否仍為佔位文字，避免未設定時嘗試上傳資料。
+bool hasPlaceholderConfig()
 {
   return thingSpeakChannelId == "YOUR_CHANNEL_ID" ||
          thingSpeakMqttClientId == "YOUR_MQTT_CLIENT_ID" ||
@@ -61,14 +103,16 @@ static bool hasPlaceholderConfig()
          thingSpeakMqttPassword == "YOUR_MQTT_PASSWORD";
 }
 
-static void clearNb303Rx()
+// 清除 NB303 UART 接收緩衝，避免上一筆回應影響下一筆 AT 指令判斷。
+void clearNb303Rx()
 {
   while (NB303_PORT.available() > 0) {
     NB303_PORT.read();
   }
 }
 
-static bool waitNb303Response(unsigned long timeoutMs)
+// 等待 NB303 回應，並將收到的內容輸出到 USB 序列監控。
+bool waitNb303Response(unsigned long timeoutMs)
 {
   memset(g_lastRxBuf, 0, sizeof(g_lastRxBuf));
   size_t idx = 0;
@@ -106,8 +150,8 @@ static bool waitNb303Response(unsigned long timeoutMs)
   return strstr(g_lastRxBuf, "OK") != nullptr;
 }
 
-// 送出一行 NB303 AT 指令，並等待 OK/ERROR 或逾時。
-static bool sendNb303Command(const char *cmd, unsigned long timeoutMs)
+// 送出一筆 NB303 AT 指令，並等待 OK 或 ERROR 回應。
+bool sendNb303Command(const char *cmd, unsigned long timeoutMs)
 {
   clearNb303Rx();
   DBG_PORT.print("[TX] ");
@@ -117,16 +161,16 @@ static bool sendNb303Command(const char *cmd, unsigned long timeoutMs)
   return waitNb303Response(timeoutMs);
 }
 
-// NB-IoT 註冊狀態：,1 表示 home network，,5 表示 roaming，兩者都可視為已註冊。
-static bool isNetworkRegistered()
+// 判斷 AT+CEREG? 回應是否代表已完成 NB-IoT 網路註冊。
+bool isNetworkRegistered()
 {
   const char *p = strstr(g_lastRxBuf, "+CEREG:");
   if (p == nullptr) return false;
   return strstr(p, ",1") != nullptr || strstr(p, ",5") != nullptr;
 }
 
-// 執行任務前都先檢查 AT+CEREG?，確認 NB303 已完成網路註冊。
-static bool checkNetworkRegistration()
+// 查詢 NB303 網路註冊狀態，並更新目前註冊旗標。
+bool checkNetworkRegistration()
 {
   bool cmdOk = sendNb303Command("AT+CEREG?", 3000);
   bool registered = cmdOk && isNetworkRegistered();
@@ -144,8 +188,8 @@ static bool checkNetworkRegistration()
   return registered;
 }
 
-// 觸發 NB303 重開機：GPIO15/GPIO33 拉低 5 秒，再拉高。
-static void rebootNb303()
+// 將 GPIO15 與 GPIO33 拉低 5 秒後拉高，用來觸發 NB303 重開機。
+void rebootNb303()
 {
   DBG_PORT.println("[PWR] NB303 reboot trigger: GPIO15/GPIO33 LOW for 5s");
   pinMode(nb303BootPin1, OUTPUT);
@@ -160,8 +204,8 @@ static void rebootNb303()
   delay(1000);
 }
 
-// NB303 可回應 ATI 後，立即鎖定睡眠，避免模組進入 sleep。
-static void runAtiAndSleepLock()
+// 送出 ATI 確認 NB303 可回應，成功後送出 AT+SM=LOCK_FOREVER 關閉睡眠。
+void runAtiAndSleepLock()
 {
   bool atiOk = sendNb303Command("ATI", 3000);
   DBG_PORT.println(atiOk ? "[STEP ATI] OK" : "[STEP ATI] FAIL");
@@ -173,8 +217,8 @@ static void runAtiAndSleepLock()
   }
 }
 
-// 註冊逾時或需要恢復時，重新啟動 NB303 並重跑 ATI / LOCK_FOREVER。
-static void restartNb303Flow()
+// 重啟 NB303 流程，並重新進行 ATI 與關閉睡眠設定。
+void restartNb303Flow()
 {
   g_sleepLocked = false;
   g_networkRegistered = false;
@@ -191,8 +235,8 @@ static void restartNb303Flow()
   g_registrationWindowStartMs = millis();
 }
 
-// 任務真正執行前的保護流程：未註冊就等待，超過 5 分鐘才重啟 NB303。
-static bool ensureNetworkRegisteredBeforeTask()
+// 任務執行前確認 NB303 已註冊網路，若 5 分鐘內未註冊則重啟 NB303。
+bool ensureNetworkRegisteredBeforeTask()
 {
   if (!g_sleepLocked) {
     runAtiAndSleepLock();
@@ -217,22 +261,22 @@ static bool ensureNetworkRegisteredBeforeTask()
   return false;
 }
 
-// NB303 的 EMQPUB 需要十六進位 payload，所以先把 ThingSpeak payload 轉成 hex。
-static void bytesToHex(const char *src, size_t len, char *hexOut, size_t hexOutSize)
+// 將 MQTT payload 轉成 NB303 EMQPUB 指令需要的十六進位字串。
+void bytesToHex(const char *src, size_t len, char *hexOut, size_t hexOutSize)
 {
-  static const char table[] = "0123456789abcdef";
+  char table[] = "0123456789abcdef";
   size_t out = 0;
   for (size_t i = 0; i < len; i++) {
     if ((out + 2) >= hexOutSize) break;
-    uint8_t b = (uint8_t)src[i];
+    unsigned char b = (unsigned char)src[i];
     hexOut[out++] = table[(b >> 4) & 0x0F];
     hexOut[out++] = table[b & 0x0F];
   }
   hexOut[out] = '\0';
 }
 
-// 建立 NB303 內建 MQTT session，連到 ThingSpeak MQTT broker。
-static bool mqttConnect()
+// 建立 NB303 MQTT session，並連線到 ThingSpeak MQTT broker。
+bool mqttConnect()
 {
   if (hasPlaceholderConfig()) {
     DBG_PORT.println("[CONFIG] Fill ThingSpeak MQTT constants before publishing");
@@ -268,8 +312,8 @@ static bool mqttConnect()
   return true;
 }
 
-// 讀取 DHT11 溫溼度，成功後回傳攝氏溫度與相對濕度。
-static bool readDht(float &temperature, float &humidity)
+// 讀取 DHT11 溫度與濕度，讀取失敗時輸出錯誤代碼。
+bool readDht(float &temperature, float &humidity)
 {
   int err = dht.read2(&temperature, &humidity, nullptr);
   if (err != SimpleDHTErrSuccess || isnan(temperature) || isnan(humidity)) {
@@ -286,8 +330,8 @@ static bool readDht(float &temperature, float &humidity)
   return true;
 }
 
-// 將溫溼度送到 ThingSpeak：field1=溫度，field2=濕度。
-static bool publishThingSpeak(float temperature, float humidity)
+// 將溫度與濕度組成 ThingSpeak payload，透過 NB303 MQTT 發送。
+bool publishThingSpeak(float temperature, float humidity)
 {
   if (!g_mqttConnected && !mqttConnect()) {
     return false;
@@ -313,8 +357,8 @@ static bool publishThingSpeak(float temperature, float humidity)
   return ok;
 }
 
-// 單次資料任務：讀 DHT11，然後透過 NB303 MQTT 發送到 ThingSpeak。
-static void runPublishTask()
+// 執行一次資料上傳任務，包含讀取 DHT11 與發送 ThingSpeak MQTT。
+void runPublishTask()
 {
   float temperature = 0;
   float humidity = 0;
@@ -328,8 +372,8 @@ static void runPublishTask()
   DBG_PORT.println("[TASK] ThingSpeak publish done");
 }
 
-// USB 序列監控可手動輸入 AT 指令，方便現場除錯 NB303。
-static void handleUsbConsole()
+// 讓 USB 序列監控可手動輸入 AT 指令，方便直接測試 NB303。
+void handleUsbConsole()
 {
   while (DBG_PORT.available() > 0) {
     int c = DBG_PORT.read();
@@ -358,8 +402,8 @@ static void handleUsbConsole()
   }
 }
 
-// 印出 NB303 主動回報，例如 +IP 或其他 URC。
-static void mirrorNb303Urc()
+// 將 NB303 主動輸出的 URC 訊息同步顯示到 USB 序列監控。
+void mirrorNb303Urc()
 {
   while (NB303_PORT.available() > 0) {
     int c = NB303_PORT.read();
@@ -367,59 +411,10 @@ static void mirrorNb303Urc()
   }
 }
 
-void setup()
+// 讓內建 LED 閃爍，表示 ESP32 主程式仍在執行。
+void blinkStatusLed()
 {
-  pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, LOW);
-
-  DBG_PORT.begin(debugBaud);
-  delay(300);
-  DBG_PORT.println();
-  DBG_PORT.println("=== 13_esp32_nb303_thingspeak_dht_mqtt ===");
-  DBG_PORT.println("NB303 reboot trigger: GPIO15/GPIO33 LOW 5s, then HIGH");
-  rebootNb303();
-
-  NB303_PORT.begin(nb303Baud, SERIAL_8N1, nb303RxPin, nb303TxPin);
-
-  DBG_PORT.println("NB303 UART: RX2=GPIO16 <- NB303 TX, TX2=GPIO17 -> NB303 RX, 115200 8N1");
-  DBG_PORT.println("DHT: GPIO25, DHT11, SimpleDHT");
-  DBG_PORT.println("ThingSpeak MQTT: mqtt3.thingspeak.com:1883");
-  DBG_PORT.print("> ");
-
-  runAtiAndSleepLock();
-  g_lastAtiMs = millis();
-  g_registrationWindowStartMs = millis();
-}
-
-void loop()
-{
-  handleUsbConsole();
-  mirrorNb303Urc();
-
   unsigned long now = millis();
-  if (!g_sleepLocked && (now - g_lastAtiMs) >= atiIntervalMs) {
-    g_lastAtiMs = now;
-    runAtiAndSleepLock();
-  }
-
-  // 註冊成功後立即送第一筆，之後每 1 分鐘送 1 筆。
-  bool duePublish = g_lastPublishMs == 0 || (now - g_lastPublishMs) >= publishIntervalMs;
-  if (g_publishImmediatelyAfterRegister) {
-    duePublish = true;
-  }
-  bool dueCereg = g_sleepLocked && (now - g_lastCeregMs) >= ceregIntervalMs;
-
-  if (duePublish || dueCereg) {
-    g_lastCeregMs = now;
-    if (ensureNetworkRegisteredBeforeTask()) {
-      if (duePublish) {
-        runPublishTask();
-        g_lastPublishMs = millis();
-        g_publishImmediatelyAfterRegister = false;
-      }
-    }
-  }
-
   static unsigned long lastBlinkMs = 0;
   if ((now - lastBlinkMs) >= 500) {
     lastBlinkMs = now;
