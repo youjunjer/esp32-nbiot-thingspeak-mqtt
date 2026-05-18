@@ -131,23 +131,9 @@ MQTT 發送目標：
 7. 後續每 1 分鐘發送 1 筆資料。
 8. 若重開機後 5 分鐘內仍未完成註冊，系統會再次觸發 NB303 重開機。
 
-## 編譯
+## 成果圖
 
-```powershell
-python -m platformio run
-```
-
-## 上傳
-
-```powershell
-python -m platformio run -t upload
-```
-
-## 監控
-
-```powershell
-python -m platformio device monitor --port COM11 --baud 115200
-```
+![ThingSpeak 資料接收成果](docs/images/thingspeak-result.jpg)
 
 ## 注意事項
 
