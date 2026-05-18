@@ -39,23 +39,28 @@ SimpleDHT11 dht(dhtPin); // DHT11 感測器物件。
 
 void setup()
 {
+  // 初始化 ESP32 內建 LED，作為主程式執行狀態指示。
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, LOW);
 
+  // 啟動 USB 序列監控，輸出 NB303 與 ThingSpeak MQTT 測試訊息。
   Serial.begin(debugBaud);
   delay(300);
   Serial.println();
   Serial.println("=== esp32_nb303_thingspeak_dht_mqtt ===");
   Serial.println("NB303 reboot trigger: GPIO15/GPIO33 LOW 5s, then HIGH");
 
+  // 開機時先觸發 NB303 重開機，再啟動 ESP32 Serial2 與 NB303 通訊。
   rebootNb303();
   Serial2.begin(nb303Baud, SERIAL_8N1, nb303RxPin, nb303TxPin);
 
+  // 輸出目前硬體與 MQTT 基本設定，方便從序列監控確認接線與參數。
   Serial.println("NB303 UART: RX2=GPIO16 <- NB303 TX, TX2=GPIO17 -> NB303 RX, 115200 8N1");
   Serial.println("DHT: GPIO25, DHT11, SimpleDHT");
   Serial.println("ThingSpeak MQTT: mqtt3.thingspeak.com:1883");
   Serial.print("> ");
 
+  // 確認 NB303 可以回應 ATI，成功後關閉睡眠並記錄註冊等待起始時間。
   runAtiAndSleepLock();
   g_lastAtiMs = millis();
   g_registrationWindowStartMs = millis();
@@ -63,25 +68,36 @@ void setup()
 
 void loop()
 {
+  // 處理 USB 序列監控輸入，允許手動輸入 AT 指令測試 NB303。
   handleUsbConsole();
+
+  // 顯示 NB303 主動回報的 URC 訊息，避免錯過模組狀態變化。
   mirrorNb303Urc();
 
+  // 取得目前時間，用於判斷 ATI、註冊檢查與資料上傳週期。
   unsigned long now = millis();
+
+  // 若尚未成功關閉睡眠，依設定間隔重新送 ATI 與 AT+SM=LOCK_FOREVER。
   if (!g_sleepLocked && (now - g_lastAtiMs) >= atiIntervalMs) {
     g_lastAtiMs = now;
     runAtiAndSleepLock();
   }
 
+  // 判斷是否到達 ThingSpeak 上傳時間；註冊成功後第一筆資料立即上傳。
   bool duePublish = g_lastPublishMs == 0 || (now - g_lastPublishMs) >= publishIntervalMs;
   if (g_publishImmediatelyAfterRegister) {
     duePublish = true;
   }
+
+  // 判斷是否到達 NB303 網路註冊狀態檢查時間。
   bool dueCereg = g_sleepLocked && (now - g_lastCeregMs) >= ceregIntervalMs;
 
+  // 每次真正執行上傳任務前都先確認 NB303 已完成網路註冊。
   if (duePublish || dueCereg) {
     g_lastCeregMs = now;
     if (ensureNetworkRegisteredBeforeTask()) {
       if (duePublish) {
+        // 已註冊且到達上傳時機時，讀取 DHT11 並送出 ThingSpeak MQTT 資料。
         runPublishTask();
         g_lastPublishMs = millis();
         g_publishImmediatelyAfterRegister = false;
@@ -89,6 +105,7 @@ void loop()
     }
   }
 
+  // 閃爍內建 LED，表示 ESP32 主迴圈仍持續執行。
   blinkStatusLed();
 }
 
