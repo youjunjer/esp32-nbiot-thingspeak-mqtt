@@ -36,7 +36,7 @@ static const char *kMqttBuffer = "1024";
 // ThingSpeak MQTT Device credentials 與 Channel ID。
 static const char *kThingSpeakChannelId = "2925903";
 static const char *kThingSpeakMqttClientId = "YOUR_MQTT_CLIENT_ID";
-static const char *kThingSpeakMqttUsername = "YOUR_MQTT_CLIENT_ID";
+static const char *kThingSpeakMqttUsername = "YOUR_MQTT_USERNAME";
 static const char *kThingSpeakMqttPassword = "YOUR_MQTT_PASSWORD";
 
 static bool g_sleepLocked = false;
