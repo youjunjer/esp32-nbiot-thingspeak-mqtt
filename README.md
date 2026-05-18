@@ -66,7 +66,7 @@ static const char *kThingSpeakMqttPassword = "...";
 
 #### 1. Channel ID
 
-![ThingSpeak Channel ID](docs/images/thingspeak-channel-id.png)
+![ThingSpeak Channel ID](docs/images/thingspeak-channel-id.jpg)
 
 Channel 頁面會顯示 `Channel ID`。本專案目前使用：
 
