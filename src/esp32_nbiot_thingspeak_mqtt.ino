@@ -3,8 +3,6 @@
 #include <math.h>
 #include <string.h>
 
-#define DBG_PORT Serial
-#define NB303_PORT Serial2
 
 int nb303RxPin = 16; // NB303 UART 接收腳，ESP32 RX2，連接 NB303 TX。
 int nb303TxPin = 17; // NB303 UART 傳送腳，ESP32 TX2，連接 NB303 RX。
@@ -44,19 +42,19 @@ void setup()
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, LOW);
 
-  DBG_PORT.begin(debugBaud);
+  Serial.begin(debugBaud);
   delay(300);
-  DBG_PORT.println();
-  DBG_PORT.println("=== esp32_nb303_thingspeak_dht_mqtt ===");
-  DBG_PORT.println("NB303 reboot trigger: GPIO15/GPIO33 LOW 5s, then HIGH");
+  Serial.println();
+  Serial.println("=== esp32_nb303_thingspeak_dht_mqtt ===");
+  Serial.println("NB303 reboot trigger: GPIO15/GPIO33 LOW 5s, then HIGH");
 
   rebootNb303();
-  NB303_PORT.begin(nb303Baud, SERIAL_8N1, nb303RxPin, nb303TxPin);
+  Serial2.begin(nb303Baud, SERIAL_8N1, nb303RxPin, nb303TxPin);
 
-  DBG_PORT.println("NB303 UART: RX2=GPIO16 <- NB303 TX, TX2=GPIO17 -> NB303 RX, 115200 8N1");
-  DBG_PORT.println("DHT: GPIO25, DHT11, SimpleDHT");
-  DBG_PORT.println("ThingSpeak MQTT: mqtt3.thingspeak.com:1883");
-  DBG_PORT.print("> ");
+  Serial.println("NB303 UART: RX2=GPIO16 <- NB303 TX, TX2=GPIO17 -> NB303 RX, 115200 8N1");
+  Serial.println("DHT: GPIO25, DHT11, SimpleDHT");
+  Serial.println("ThingSpeak MQTT: mqtt3.thingspeak.com:1883");
+  Serial.print("> ");
 
   runAtiAndSleepLock();
   g_lastAtiMs = millis();
@@ -106,8 +104,8 @@ bool hasPlaceholderConfig()
 // 清除 NB303 UART 接收緩衝，避免上一筆回應影響下一筆 AT 指令判斷。
 void clearNb303Rx()
 {
-  while (NB303_PORT.available() > 0) {
-    NB303_PORT.read();
+  while (Serial2.available() > 0) {
+    Serial2.read();
   }
 }
 
@@ -119,14 +117,14 @@ bool waitNb303Response(unsigned long timeoutMs)
   bool gotAny = false;
   unsigned long start = millis();
 
-  DBG_PORT.println("[NB303 RX]");
+  Serial.println("[NB303 RX]");
   while ((millis() - start) < timeoutMs) {
-    while (NB303_PORT.available() > 0) {
-      int c = NB303_PORT.read();
+    while (Serial2.available() > 0) {
+      int c = Serial2.read();
       if (c < 0) continue;
 
       gotAny = true;
-      DBG_PORT.write((char)c);
+      Serial.write((char)c);
       if (idx < sizeof(g_lastRxBuf) - 1U) {
         g_lastRxBuf[idx++] = (char)c;
       }
@@ -142,9 +140,9 @@ bool waitNb303Response(unsigned long timeoutMs)
   }
 
   if (!gotAny) {
-    DBG_PORT.println("(no response)");
+    Serial.println("(no response)");
   } else {
-    DBG_PORT.println();
+    Serial.println();
   }
 
   return strstr(g_lastRxBuf, "OK") != nullptr;
@@ -154,10 +152,10 @@ bool waitNb303Response(unsigned long timeoutMs)
 bool sendNb303Command(const char *cmd, unsigned long timeoutMs)
 {
   clearNb303Rx();
-  DBG_PORT.print("[TX] ");
-  DBG_PORT.println(cmd);
-  NB303_PORT.print(cmd);
-  NB303_PORT.print("\r\n");
+  Serial.print("[TX] ");
+  Serial.println(cmd);
+  Serial2.print(cmd);
+  Serial2.print("\r\n");
   return waitNb303Response(timeoutMs);
 }
 
@@ -176,9 +174,9 @@ bool checkNetworkRegistration()
   bool registered = cmdOk && isNetworkRegistered();
 
   if (registered) {
-    DBG_PORT.println(g_networkRegistered ? "[STEP CEREG] STILL REGISTERED" : "[STEP CEREG] REGISTERED");
+    Serial.println(g_networkRegistered ? "[STEP CEREG] STILL REGISTERED" : "[STEP CEREG] REGISTERED");
   } else {
-    DBG_PORT.println("[STEP CEREG] NOT REGISTERED");
+    Serial.println("[STEP CEREG] NOT REGISTERED");
   }
 
   if (registered && !g_networkRegistered) {
@@ -191,14 +189,14 @@ bool checkNetworkRegistration()
 // 將 GPIO15 與 GPIO33 拉低 5 秒後拉高，用來觸發 NB303 重開機。
 void rebootNb303()
 {
-  DBG_PORT.println("[PWR] NB303 reboot trigger: GPIO15/GPIO33 LOW for 5s");
+  Serial.println("[PWR] NB303 reboot trigger: GPIO15/GPIO33 LOW for 5s");
   pinMode(nb303BootPin1, OUTPUT);
   pinMode(nb303BootPin2, OUTPUT);
   digitalWrite(nb303BootPin1, LOW);
   digitalWrite(nb303BootPin2, LOW);
   delay(nb303BootLowMs);
 
-  DBG_PORT.println("[PWR] GPIO15/GPIO33 HIGH");
+  Serial.println("[PWR] GPIO15/GPIO33 HIGH");
   digitalWrite(nb303BootPin1, HIGH);
   digitalWrite(nb303BootPin2, HIGH);
   delay(1000);
@@ -208,11 +206,11 @@ void rebootNb303()
 void runAtiAndSleepLock()
 {
   bool atiOk = sendNb303Command("ATI", 3000);
-  DBG_PORT.println(atiOk ? "[STEP ATI] OK" : "[STEP ATI] FAIL");
+  Serial.println(atiOk ? "[STEP ATI] OK" : "[STEP ATI] FAIL");
 
   if (atiOk && !g_sleepLocked) {
     bool lockOk = sendNb303Command("AT+SM=LOCK_FOREVER", 3000);
-    DBG_PORT.println(lockOk ? "[STEP SM] LOCK_FOREVER OK" : "[STEP SM] LOCK_FOREVER FAIL");
+    Serial.println(lockOk ? "[STEP SM] LOCK_FOREVER OK" : "[STEP SM] LOCK_FOREVER FAIL");
     g_sleepLocked = lockOk;
   }
 }
@@ -225,9 +223,9 @@ void restartNb303Flow()
   g_mqttConnected = false;
   g_publishImmediatelyAfterRegister = true;
   g_lastPublishMs = 0;
-  NB303_PORT.end();
+  Serial2.end();
   rebootNb303();
-  NB303_PORT.begin(nb303Baud, SERIAL_8N1, nb303RxPin, nb303TxPin);
+  Serial2.begin(nb303Baud, SERIAL_8N1, nb303RxPin, nb303TxPin);
   delay(300);
   runAtiAndSleepLock();
   g_lastAtiMs = millis();
@@ -249,13 +247,13 @@ bool ensureNetworkRegisteredBeforeTask()
   unsigned long now = millis();
   unsigned long elapsed = now - g_registrationWindowStartMs;
   if (elapsed >= registrationTimeoutMs) {
-    DBG_PORT.println("[RECOVER] Not registered for 300s, reboot NB303 before task");
+    Serial.println("[RECOVER] Not registered for 300s, reboot NB303 before task");
     restartNb303Flow();
   } else {
     unsigned long remainSec = (registrationTimeoutMs - elapsed + 999) / 1000;
-    DBG_PORT.print("[WAIT] Registration pending, retry before reboot in ");
-    DBG_PORT.print(remainSec);
-    DBG_PORT.println("s");
+    Serial.print("[WAIT] Registration pending, retry before reboot in ");
+    Serial.print(remainSec);
+    Serial.println("s");
   }
 
   return false;
@@ -279,7 +277,7 @@ void bytesToHex(const char *src, size_t len, char *hexOut, size_t hexOutSize)
 bool mqttConnect()
 {
   if (hasPlaceholderConfig()) {
-    DBG_PORT.println("[CONFIG] Fill ThingSpeak MQTT constants before publishing");
+    Serial.println("[CONFIG] Fill ThingSpeak MQTT constants before publishing");
     return false;
   }
 
@@ -287,27 +285,27 @@ bool mqttConnect()
 
   snprintf(cmd, sizeof(cmd), "AT+EDNS=\"%s\"", thingSpeakHost.c_str());
   if (!sendNb303Command(cmd, 8000)) {
-    DBG_PORT.println("[STEP EDNS] FAIL");
+    Serial.println("[STEP EDNS] FAIL");
     return false;
   }
-  DBG_PORT.println("[STEP EDNS] OK");
+  Serial.println("[STEP EDNS] OK");
 
   snprintf(cmd, sizeof(cmd), "AT+EMQNEW=%s,%s,%s,%s",
            thingSpeakHost.c_str(), thingSpeakPort.c_str(), mqttTimeout.c_str(), mqttBuffer.c_str());
   if (!sendNb303Command(cmd, 8000)) {
-    DBG_PORT.println("[STEP EMQNEW] FAIL");
+    Serial.println("[STEP EMQNEW] FAIL");
     return false;
   }
-  DBG_PORT.println("[STEP EMQNEW] OK");
+  Serial.println("[STEP EMQNEW] OK");
 
   snprintf(cmd, sizeof(cmd), "AT+EMQCON=0,3.1,\"%s\",60000,1,0,\"%s\",\"%s\"",
            thingSpeakMqttClientId.c_str(), thingSpeakMqttUsername.c_str(), thingSpeakMqttPassword.c_str());
   if (!sendNb303Command(cmd, 10000)) {
-    DBG_PORT.println("[STEP EMQCON] FAIL");
+    Serial.println("[STEP EMQCON] FAIL");
     return false;
   }
 
-  DBG_PORT.println("[STEP EMQCON] OK");
+  Serial.println("[STEP EMQCON] OK");
   g_mqttConnected = true;
   return true;
 }
@@ -317,16 +315,16 @@ bool readDht(float &temperature, float &humidity)
 {
   int err = dht.read2(&temperature, &humidity, nullptr);
   if (err != SimpleDHTErrSuccess || isnan(temperature) || isnan(humidity)) {
-    DBG_PORT.print("[DHT11] read failed, err=");
-    DBG_PORT.println(err);
+    Serial.print("[DHT11] read failed, err=");
+    Serial.println(err);
     return false;
   }
 
-  DBG_PORT.print("[DHT11] T=");
-  DBG_PORT.print(temperature, 1);
-  DBG_PORT.print("C H=");
-  DBG_PORT.print(humidity, 1);
-  DBG_PORT.println("%");
+  Serial.print("[DHT11] T=");
+  Serial.print(temperature, 1);
+  Serial.print("C H=");
+  Serial.print(humidity, 1);
+  Serial.println("%");
   return true;
 }
 
@@ -349,7 +347,7 @@ bool publishThingSpeak(float temperature, float humidity)
   char cmd[420];
   snprintf(cmd, sizeof(cmd), "AT+EMQPUB=0,%s,0,0,0,%d,%s", topic, (int)strlen(hexPayload), hexPayload);
   bool ok = sendNb303Command(cmd, 10000);
-  DBG_PORT.println(ok ? "[STEP EMQPUB] OK" : "[STEP EMQPUB] FAIL");
+  Serial.println(ok ? "[STEP EMQPUB] OK" : "[STEP EMQPUB] FAIL");
 
   if (!ok) {
     g_mqttConnected = false;
@@ -365,18 +363,18 @@ void runPublishTask()
   if (!readDht(temperature, humidity)) return;
 
   if (!publishThingSpeak(temperature, humidity)) {
-    DBG_PORT.println("[TASK] ThingSpeak publish failed");
+    Serial.println("[TASK] ThingSpeak publish failed");
     return;
   }
 
-  DBG_PORT.println("[TASK] ThingSpeak publish done");
+  Serial.println("[TASK] ThingSpeak publish done");
 }
 
 // 讓 USB 序列監控可手動輸入 AT 指令，方便直接測試 NB303。
 void handleUsbConsole()
 {
-  while (DBG_PORT.available() > 0) {
-    int c = DBG_PORT.read();
+  while (Serial.available() > 0) {
+    int c = Serial.read();
     if (c < 0) continue;
 
     if (c == '\r' || c == '\n') {
@@ -384,20 +382,20 @@ void handleUsbConsole()
         g_cmdBuf[g_cmdLen] = '\0';
         sendNb303Command(g_cmdBuf, 3000);
         g_cmdLen = 0;
-        DBG_PORT.print("> ");
+        Serial.print("> ");
       }
       continue;
     }
 
     if ((c == 0x08 || c == 0x7F) && g_cmdLen > 0) {
       g_cmdLen--;
-      DBG_PORT.print("\b \b");
+      Serial.print("\b \b");
       continue;
     }
 
     if (g_cmdLen < sizeof(g_cmdBuf) - 1U) {
       g_cmdBuf[g_cmdLen++] = (char)c;
-      DBG_PORT.write((char)c);
+      Serial.write((char)c);
     }
   }
 }
@@ -405,9 +403,9 @@ void handleUsbConsole()
 // 將 NB303 主動輸出的 URC 訊息同步顯示到 USB 序列監控。
 void mirrorNb303Urc()
 {
-  while (NB303_PORT.available() > 0) {
-    int c = NB303_PORT.read();
-    if (c >= 0) DBG_PORT.write((char)c);
+  while (Serial2.available() > 0) {
+    int c = Serial2.read();
+    if (c >= 0) Serial.write((char)c);
   }
 }
 
