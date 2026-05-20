@@ -46,12 +46,15 @@ String thingSpeakMqttPassword = "YOUR_MQTT_PASSWORD";
 
 MQTT 連線設定：
 
-- Host：`mqtt3.thingspeak.com`
+- Domain：`mqtt3.thingspeak.com`
+- NB303 EMQNEW Host/IP：`34.194.89.194`
 - Port：`1883`
 - Topic：`channels/<channelID>/publish`
 - Payload：`field1=<temperature>&field2=<humidity>&status=NB303`
 - Field 1：溫度
 - Field 2：濕度
+
+NB303 的 `AT+EMQNEW` 實測需使用 broker IP。若 ThingSpeak DNS 解析結果改變，請先用 `AT+EDNS="mqtt3.thingspeak.com"` 取得目前 IP，再更新程式中的 `thingSpeakHost`。
 
 ## ThingSpeak 資料取得方式
 

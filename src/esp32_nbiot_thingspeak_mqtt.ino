@@ -16,7 +16,8 @@ int ceregIntervalMs = 5000; // AT+CEREG? 註冊狀態檢查間隔，單位毫秒
 int registrationTimeoutMs = 300000; // NB303 註冊等待上限，單位毫秒。
 int nb303BootLowMs = 5000; // NB303 重開機控制腳拉低時間，單位毫秒。
 int publishIntervalMs = 60000; // ThingSpeak 發送間隔，單位毫秒。
-String thingSpeakHost = "mqtt3.thingspeak.com"; // ThingSpeak MQTT broker 主機。
+String thingSpeakDomain = "mqtt3.thingspeak.com"; // ThingSpeak MQTT broker domain，用於 AT+EDNS 查詢。
+String thingSpeakHost = "34.194.89.194"; // ThingSpeak MQTT broker IP，NB303 AT+EMQNEW 使用。
 String thingSpeakPort = "1883"; // ThingSpeak MQTT broker port。
 String mqttTimeout = "60000"; // NB303 MQTT 連線 timeout 參數。
 String mqttBuffer = "1024"; // NB303 MQTT buffer 大小。
@@ -57,7 +58,7 @@ void setup()
   // 輸出目前硬體與 MQTT 基本設定，方便從序列監控確認接線與參數。
   Serial.println("NB303 UART: RX2=GPIO16 <- NB303 TX, TX2=GPIO17 -> NB303 RX, 115200 8N1");
   Serial.println("DHT: GPIO25, DHT11, SimpleDHT");
-  Serial.println("ThingSpeak MQTT: mqtt3.thingspeak.com:1883");
+  Serial.println("ThingSpeak MQTT: mqtt3.thingspeak.com / 34.194.89.194:1883");
   Serial.print("> ");
 
   // 確認 NB303 可以回應 ATI，成功後關閉睡眠並記錄註冊等待起始時間。
@@ -300,7 +301,7 @@ bool mqttConnect()
 
   char cmd[360];
 
-  snprintf(cmd, sizeof(cmd), "AT+EDNS=\"%s\"", thingSpeakHost.c_str());
+  snprintf(cmd, sizeof(cmd), "AT+EDNS=\"%s\"", thingSpeakDomain.c_str());
   if (!sendNb303Command(cmd, 8000)) {
     Serial.println("[STEP EDNS] FAIL");
     return false;
